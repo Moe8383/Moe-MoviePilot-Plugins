@@ -67,6 +67,31 @@ class EmbyReporter(_PluginBase):
     _EMBY_APIKEY = None
     _EMBY_USER = None
 
+   # 单位自适应
+    def _duration_to_seconds(self, duration: int) -> int:
+        """
+        Playback Reporting 的 duration 可能是：
+          - 秒（常见）
+          - 毫秒
+          - ticks（100ns）
+        用量级做一次兜底转换，避免显示异常。
+        """
+            if duration is None:
+            return 0
+        duration = int(duration)
+    
+        # ticks（100ns）通常非常大：比如 1 小时 ~= 36_000_000_000
+        if duration >= 10_000_000_000:
+            return duration // 10_000_000
+    
+        # 毫秒：比如 1 小时 ~= 3_600_000
+        if duration >= 1_000_000:
+            return duration // 1000
+    
+        # 默认按“秒”
+        return duration
+    
+    
     def init_plugin(self, config: dict = None):
         # 停止现有任务
         self.stop_service()
@@ -631,7 +656,7 @@ class EmbyReporter(_PluginBase):
             try:
                 # 榜单项数据
                 user_id, item_id, item_type, name, count, duration = tuple(i)
-                print(item_type, item_id, name, count, StringUtils.str_secends(int(duration)))
+                print(item_type, item_id, name, count, duration_sec = self._duration_to_seconds(duration) StringUtils.str_secends(duration_sec))
                 # 封面图像获取
                 success, data = self.primary(item_id)
                 if not success:
@@ -663,7 +688,8 @@ class EmbyReporter(_PluginBase):
             try:
                 # 榜单项数据
                 user_id, item_id, item_type, name, count, duration = tuple(i)
-                print(item_type, item_id, name, count, StringUtils.str_secends(int(duration)))
+                print(item_type, item_id, name, count, duration_sec = self._duration_to_seconds(duration)
+StringUtils.str_secends(duration_sec))
                 # 图片获取，剧集主封面获取
                 # 获取剧ID
                 success, data = self.items(user_id, item_id)
@@ -734,9 +760,11 @@ class EmbyReporter(_PluginBase):
                 if show_time:
                     self.draw_text_psd_style(text,
                                              (177 + 145 * index - font_count.getlength(
-                                                 StringUtils.str_secends(int(duration))),
+                                                 duration_sec = self._duration_to_seconds(duration)
+StringUtils.str_secends(duration_sec)),
                                               355 + offset_y),
-                                             StringUtils.str_secends(int(duration)), font_count, 126)
+                                             duration_sec = self._duration_to_seconds(duration)
+StringUtils.str_secends(duration_sec), font_count, 126)
                 self.draw_text_psd_style(text, (74 + 145 * index, 542 + font_offset_y + offset_y), name, temp_font, 126)
             except Exception:
                 continue
@@ -847,7 +875,7 @@ class EmbyReporter(_PluginBase):
         sql = "SELECT UserId, ItemId, ItemType, "
         sql += types + " AS name, "
         sql += "COUNT(1) AS play_count, "
-        sql += "SUM(PlayDuration - PauseDuration) AS total_duration "
+        sql += "SUM(PlayDuration) AS total_duration "
         sql += "FROM PlaybackActivity "
         sql += f"WHERE ItemType = '{'Movie' if types == self.PLAYBACK_REPORTING_TYPE_MOVIE else 'Episode'}' "
         sql += f"AND DateCreated >= '{start_time}' AND DateCreated <= '{end_time}' "
